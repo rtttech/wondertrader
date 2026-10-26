@@ -1,4 +1,4 @@
-﻿/*!
+/*!
 * \file MfStraBaseCtx.cpp
 * \project	WonderTrader
 *
@@ -564,7 +564,10 @@ void SelStraBaseCtx::on_tick(const char* stdCode, WTSTickData* newTick, bool bEm
 		{
 			WTSSessionInfo* sInfo = _engine->get_session_info(stdCode, true);
 
-			if (sInfo->isInTradingTime(_engine->get_raw_time(), true))
+			//原实现使用引擎全局时钟判断交易时间,若引擎时钟被夜盘残留登录快照行情钉死在夜盘尾段,
+			//收盘较早的品种(夜盘23:00收盘)的信号将永远无法交付执行器
+			//改用当前tick自身的交易时间判断,与全局时钟解耦(与WtExeFact各执行单元同口径)
+			if (sInfo->isInTradingTime(newTick->actiontime() / 100000, true))
 			{
 				const SigInfo& sInfo = it->second;
 				do_set_position(stdCode, sInfo._volume, sInfo._usertag.c_str(), sInfo._triggered);

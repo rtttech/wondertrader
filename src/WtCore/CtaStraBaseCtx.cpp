@@ -1,4 +1,4 @@
-﻿/*!
+/*!
  * \file CtaStraBaseCtx.cpp
  * \project	WonderTrader
  *
@@ -655,7 +655,9 @@ void CtaStraBaseCtx::on_bar(const char* stdCode, const char* period, uint32_t ti
 	fmtutil::format_to(realPeriod, "{}{}", period, times);
 
 	thread_local static char key[64] = { 0 };
-	fmtutil::format_to(key, "{}#{}{}", stdCode, realPeriod);
+	//v0.9.9 tag 此处为 "{}#{}{}"(3占位符2参数), fmt 运行期抛 format_error, 首次 Bar 收线即 terminate;
+	//上游 master 已修为 "{}#{}"(realPeriod 本身含 times), 官方 wheel(2023-12-31 打包)自带此修复
+	fmtutil::format_to(key, "{}#{}", stdCode, realPeriod);
 
 	KlineTag& tag = _kline_tags[key];
 	tag._closed = true;
@@ -804,7 +806,10 @@ void CtaStraBaseCtx::on_tick(const char* stdCode, WTSTickData* newTick, bool bEm
 		if(it != _sig_map.end())
 		{
 			WTSSessionInfo* sInfo = _engine->get_session_info(stdCode, true);
-			if (sInfo->isInTradingTime(_engine->get_raw_time(), true))
+			//原实现使用引擎全局时钟判断交易时间,若引擎时钟被夜盘残留登录快照行情钉死在夜盘尾段,
+			//收盘较早的品种(夜盘23:00收盘)的信号将永远无法交付执行器
+			//改用当前tick自身的交易时间判断,与全局时钟解耦(与WtExeFact各执行单元同口径)
+			if (sInfo->isInTradingTime(newTick->actiontime() / 100000, true))
 			{
 				const SigInfo sInfo = it->second;
 				//只有当信号类型不为0，即bar内信号或者条件单触发信号时，且信号没有触发过

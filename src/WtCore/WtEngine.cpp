@@ -1,4 +1,4 @@
-﻿/*!
+/*!
  * \file WtEngine.cpp
  * \project	WonderTrader
  *
@@ -126,7 +126,10 @@ void WtEngine::on_tick(const char* stdCode, WTSTickData* curTick)
 		{
 			WTSSessionInfo* sInfo = get_session_info(stdCode, true);
 
-			if (sInfo->isInTradingTime(_cur_raw_time, true))
+			//原实现使用引擎全局时钟判断交易时间,若引擎时钟被夜盘残留登录快照行情钉死在夜盘尾段,
+			//收盘较早的品种(夜盘23:00收盘)的信号将永远无法交付执行器
+			//改用当前tick自身的交易时间判断,与全局时钟解耦(与WtExeFact各执行单元同口径)
+			if (sInfo->isInTradingTime(curTick->actiontime() / 100000, true))
 			{
 				const SigInfo& sInfo = it->second;
 				double pos = sInfo._volume;

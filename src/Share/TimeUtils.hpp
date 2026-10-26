@@ -1,4 +1,4 @@
-﻿/*!
+/*!
  * \file TimeUtils.hpp
  * \project	WonderTrader
  *
@@ -136,6 +136,41 @@ public:
 		time = tNow->tm_hour*10000 + tNow->tm_min*100 + tNow->tm_sec;
 		time *= 1000;
 		time += millitm;
+	}
+
+	/*
+	 *	将HHMM时间映射为交易日内的时序键
+	 *	同一交易日内,夜盘时段(>=20:00,含跨日的00:00~02:59)在时序上先于当日日盘时段
+	 *	用于交易日内的行情时间先后比较,避免夜盘收盘后收到的残留快照行情被误判为最新行情
+	 *	映射规则: 2000->0, 2100->100, 2300->300, 0000->400, 0900->1300, 1500->1900
+	 */
+	static inline uint32_t chronoKeyOf(uint32_t uHHMM)
+	{
+		return (uHHMM >= 2000) ? (uHHMM - 2000) : (uHHMM + 400);
+	}
+
+	/*
+	 *	判断行情tick是否为陈旧行情(不晚于本地已记录的最新时间)
+	 *	uDate/uTime: 行情时间戳, actiondate + actiontime(HHMMSSmmm, 9位)
+	 *	lDate/lTime: 本地已记录的最新时间戳
+	 *	原实现直接比较HHMMSSmmm整数, 同一交易日内夜盘时段(21:00~23:59)在时序上先于日盘,
+	 *	夜盘收盘后到日盘开盘前收到的夜盘残留登录快照行情会被误判为最新行情,
+	 *	导致分钟游标越过全部日盘分钟、引擎时钟被钉死在夜盘尾段, 信号无法交付执行器
+	 *	这里统一改用交易日内的时序键比较, 夜盘时间映射到交易日最前段
+	 *	lDate为0表示尚未记录任何行情, 一律不判陈旧
+	 */
+	static inline bool isTickStale(uint32_t uDate, uint32_t uTime, uint32_t lDate, uint32_t lTime)
+	{
+		if (lDate == 0)
+			return false;
+		if (uDate != lDate)
+			return uDate < lDate;
+
+		uint32_t uKey = chronoKeyOf(uTime / 100000);
+		uint32_t lKey = chronoKeyOf(lTime / 100000);
+		if (uKey != lKey)
+			return uKey < lKey;
+		return uTime < lTime;
 	}
 
 	static inline uint32_t getCurDate()

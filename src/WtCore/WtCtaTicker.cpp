@@ -1,4 +1,4 @@
-﻿/*!
+/*!
  * \file WtCtaTicker.cpp
  * \project	WonderTrader
  *
@@ -67,7 +67,7 @@ void WtCtaRtTicker::on_tick(WTSTickData* curTick)
 	uint32_t uDate = curTick->actiondate();
 	uint32_t uTime = curTick->actiontime();
 
-	if (_date != 0 && (uDate < _date || (uDate == _date && uTime < _time)))
+	if (TimeUtils::isTickStale(uDate, uTime, _date, _time))
 	{
 		//WTSLogger::info("行情时间{}小于本地时间{}", uTime, _time);
 		trigger_price(curTick);
