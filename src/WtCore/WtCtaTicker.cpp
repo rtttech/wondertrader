@@ -67,7 +67,7 @@ void WtCtaRtTicker::on_tick(WTSTickData* curTick)
 		if (s_lastThrdWarn == 0 || nowMs - s_lastThrdWarn > 30000)
 		{
 			WTSLogger::warn("Ticker thread not running, tick {}.{} of {} will not drive engine clock",
-				curTick->actiondate(), curTick->actiontime(), curTick->excode());
+				curTick->actiondate(), curTick->actiontime(), curTick->code());
 			s_lastThrdWarn = nowMs;
 		}
 		trigger_price(curTick);
