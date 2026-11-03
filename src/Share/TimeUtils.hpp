@@ -163,11 +163,24 @@ public:
 	{
 		if (lDate == 0)
 			return false;
-		if (uDate != lDate)
-			return uDate < lDate;
 
-		uint32_t uKey = chronoKeyOf(uTime / 100000);
-		uint32_t lKey = chronoKeyOf(lTime / 100000);
+		/*
+		 *	交易日投影: 日历日期+时刻 -> (所属交易日, 交易日内时序键)
+		 *	夜盘时段(>=20:00)的行情在交易日序列上属于下一交易日,
+		 *	日盘收盘后到夜盘开盘前的间隙时间(15:01~19:59)属于当前交易日的最末段,
+		 *	若不投影, 此类残留快照(如19:03登录重放)会在夜盘运行期间(如22:14)被误判为最新行情,
+		 *	将基线钉死在间隙时刻, 导致整个夜盘的真实行情全部被判陈旧(2026.11.03夜盘事故)
+		 */
+		uint32_t uHHMM = uTime / 100000;
+		uint32_t lHHMM = lTime / 100000;
+		uint32_t uTDay = (uHHMM >= 2000) ? getNextDate(uDate) : uDate;
+		uint32_t lTDay = (lHHMM >= 2000) ? getNextDate(lDate) : lDate;
+
+		if (uTDay != lTDay)
+			return uTDay < lTDay;
+
+		uint32_t uKey = chronoKeyOf(uHHMM);
+		uint32_t lKey = chronoKeyOf(lHHMM);
 		if (uKey != lKey)
 			return uKey < lKey;
 		return uTime < lTime;
