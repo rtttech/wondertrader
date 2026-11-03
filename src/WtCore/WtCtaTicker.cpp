@@ -1,4 +1,4 @@
-﻿/*!
+/*!
  * \file WtCtaTicker.cpp
  * \project	WonderTrader
  *
@@ -60,6 +60,16 @@ void WtCtaRtTicker::on_tick(WTSTickData* curTick)
 {
 	if (_thrd == NULL)
 	{
+		//限频告警(30s): ticker 线程未运行时, tick 仅转发行情, 不推进引擎时钟。
+		//若交易时段内持续出现本告警, 说明 run() 未正常执行到线程创建(2026-11-03 时钟冻结事故特征)。
+		static uint64_t s_lastThrdWarn = 0;
+		uint64_t nowMs = TimeUtils::getLocalTimeNow();
+		if (s_lastThrdWarn == 0 || nowMs - s_lastThrdWarn > 30000)
+		{
+			WTSLogger::warn("Ticker thread not running, tick {}.{} of {} will not drive engine clock",
+				curTick->actiondate(), curTick->actiontime(), curTick->code());
+			s_lastThrdWarn = nowMs;
+		}
 		trigger_price(curTick);
 		return;
 	}
@@ -67,7 +77,7 @@ void WtCtaRtTicker::on_tick(WTSTickData* curTick)
 	uint32_t uDate = curTick->actiondate();
 	uint32_t uTime = curTick->actiontime();
 
-	if (_date != 0 && (uDate < _date || (uDate == _date && uTime < _time)))
+	if (TimeUtils::isTickStale(uDate, uTime, _date, _time))
 	{
 		//WTSLogger::info("行情时间{}小于本地时间{}", uTime, _time);
 		trigger_price(curTick);
@@ -270,6 +280,8 @@ void WtCtaRtTicker::run()
 			}
 		}
 	}));
+
+	WTSLogger::info("CTA ticker thread started, trading date: {}", curTDate);
 }
 
 void WtCtaRtTicker::stop()

@@ -1,0 +1,26 @@
+# 模拟测试基础配置（sim/run_sim.sh 组装 ws_sim 时使用，路径全部相对 ws 根目录）
+basefiles:
+    commodity: common/commodities.json
+    contract: common/contracts.json
+    holiday: common/holidays.json
+    hot: common/hots.json
+    session: common/sessions.json
+    uft-8: true
+data:
+    store:
+        module: WtDataStorage
+        path: storage/
+        his_path: his/
+env:
+    name: cta
+    fees: common/fees.json
+    filters: filters.yaml
+    product:
+        session: TRADING
+executers: executers.yaml
+parsers: tdparsers.yaml
+traders: tdtraders.yaml
+bspolicy: actpolicy.yaml
+notifier:
+    active: false
+    url: ipc:///wt_sim_probe.ipc

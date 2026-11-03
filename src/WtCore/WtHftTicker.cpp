@@ -1,4 +1,4 @@
-﻿/*!
+/*!
  * \file WtHftTicker.cpp
  * \project	WonderTrader
  *
@@ -77,7 +77,7 @@ void WtHftRtTicker::on_tick(WTSTickData* curTick)
 	uint32_t uDate = curTick->actiondate();
 	uint32_t uTime = curTick->actiontime();
 
-	if (_date != 0 && (uDate < _date || (uDate == _date && uTime < _time)))
+	if (TimeUtils::isTickStale(uDate, uTime, _date, _time))
 	{
 		//WTSLogger::info("行情时间{}小于本地时间{}", uTime, _time);
 		trigger_price(curTick);
@@ -186,7 +186,7 @@ void WtHftRtTicker::run()
 					_last_emit_pos = _cur_pos;
 
 					uint32_t thisMin = _s_info->minuteToTime(_cur_pos);
-					_time = thisMin;
+					_time = thisMin * 100000;//这里要还原成毫秒为单位,与on_tick中的_time保持同一格式
 
 					//如果thisMin是0, 说明换日了
 					//这里是本地计时导致的换日, 说明日期其实还是老日期, 要自动+1

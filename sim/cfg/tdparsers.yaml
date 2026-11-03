@@ -1,0 +1,11 @@
+# 模拟行情通道：ParserUDP 接收 udp_tick_feeder.py 的合成 tick
+# 注意 check_time 必须 false：feeder 强制时间基准（非交易时段灌 14:00+ 戳）
+# 与墙钟差可能 >1h，开启会被 ParserAdapter 的未来时间校验拒收
+parsers:
+-   active: true
+    id: parser_udp_sim
+    module: ParserUDP
+    host: 127.0.0.1
+    bport: 9001
+    sport: 3997
+    check_time: false

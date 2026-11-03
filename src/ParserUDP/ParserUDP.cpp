@@ -132,7 +132,11 @@ bool ParserUDP::reconnect(uint32_t flag /* = 3 */)
 		_b_socket->open(_broad_ep.protocol());
 		_b_socket->set_option(ip::udp::socket::reuse_address(true));
 		_b_socket->set_option(ip::udp::socket::broadcast(true));
-		_b_socket->set_option(ip::udp::socket::receive_buffer_size(8 * 1024 * 1024));
+		{ boost::system::error_code _ec;
+		  _b_socket->set_option(ip::udp::socket::receive_buffer_size(8 * 1024 * 1024), _ec);
+		  if (_ec)
+			  write_log(_sink, LL_INFO, "[ParserUDP] set receive_buffer_size(8MB) failed: {}({}), fallback to system default", _ec.message().c_str(), _ec.value());
+		}
 		_b_socket->bind(_broad_ep);
 
 		_b_socket->async_receive_from(buffer(_b_buffer), _broad_ep,
