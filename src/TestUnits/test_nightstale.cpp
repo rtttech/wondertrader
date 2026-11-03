@@ -56,16 +56,23 @@ TEST(test_nightstale, test_stale_night_snapshot)
 	uint32_t lDate = 20261026;
 	uint32_t lTime = 90001000;
 
-	// 快照残留tick, 覆盖夜盘全时段与跨零点时段, 全部必须判陈旧
+	// 快照残留tick(actiondate=前一自然日20261025), 覆盖夜盘全时段与跨零点时段,
+	// 全部必须判陈旧(投影后残留tick交易日=20261026, 不晚于本地交易日20261026)
 	// 注意actiontime为9位HHMMSSmmm: 10000000即01:00:00.000, 100000000即10:00:00.000
-	EXPECT_TRUE(TimeUtils::isTickStale(20261026, 210000000, lDate, lTime));
-	EXPECT_TRUE(TimeUtils::isTickStale(20261026, 220000000, lDate, lTime));
-	EXPECT_TRUE(TimeUtils::isTickStale(20261026, 230000000, lDate, lTime));
-	EXPECT_TRUE(TimeUtils::isTickStale(20261026, 230100000, lDate, lTime));
-	EXPECT_TRUE(TimeUtils::isTickStale(20261026, 235959999, lDate, lTime));
-	EXPECT_TRUE(TimeUtils::isTickStale(20261026, 0, lDate, lTime));
-	EXPECT_TRUE(TimeUtils::isTickStale(20261026, 10000000, lDate, lTime));
-	EXPECT_TRUE(TimeUtils::isTickStale(20261026, 20000000, lDate, lTime));
+	EXPECT_TRUE(TimeUtils::isTickStale(20261025, 210000000, lDate, lTime));
+	EXPECT_TRUE(TimeUtils::isTickStale(20261025, 220000000, lDate, lTime));
+	EXPECT_TRUE(TimeUtils::isTickStale(20261025, 230000000, lDate, lTime));
+	EXPECT_TRUE(TimeUtils::isTickStale(20261025, 230100000, lDate, lTime));
+	EXPECT_TRUE(TimeUtils::isTickStale(20261025, 235959999, lDate, lTime));
+	EXPECT_TRUE(TimeUtils::isTickStale(20261025, 0, lDate, lTime));
+	EXPECT_TRUE(TimeUtils::isTickStale(20261025, 10000000, lDate, lTime));
+	EXPECT_TRUE(TimeUtils::isTickStale(20261025, 20000000, lDate, lTime));
+
+	// 同日(20261026)夜盘时刻的tick是"今晚尚未发生的行情"(未来tick),
+	// 交易日投影后归属20261027 > 本地20261026, 按上游未来tick语义放行,
+	// 由Parser层check_time(未来时间戳过滤)负责拦截, 此处仅记录该行为契约
+	EXPECT_FALSE(TimeUtils::isTickStale(20261026, 210000000, lDate, lTime));
+	EXPECT_FALSE(TimeUtils::isTickStale(20261026, 230100000, lDate, lTime));
 
 	// 日盘实时tick不判陈旧(10:38为本次实盘丢信号的真实信号时刻)
 	EXPECT_FALSE(TimeUtils::isTickStale(20261026, 900000000, lDate, lTime));
@@ -91,8 +98,11 @@ TEST(test_nightstale, test_stale_recovery)
 	EXPECT_TRUE(TimeUtils::isTickStale(20261026, 230000000, lDate, lTime));
 
 	// 日盘tick放行, 时序键(900)=1300 > (2301)=301
-	EXPECT_FALSE(TimeUtils::isTickStale(20261026, 900000000, lDate, lTime));
-	EXPECT_FALSE(TimeUtils::isTickStale(20261026, 103800000, lDate, lTime));
+	// 注意: 夜盘23:01之后收到的日盘tick, 日历日期已是次日(20261027),
+	// 投影后交易日同为20261027; 若日历日期仍为20261026, 则是12小时前的残留, 必须判陈旧
+	EXPECT_FALSE(TimeUtils::isTickStale(20261027, 900000000, lDate, lTime));
+	EXPECT_FALSE(TimeUtils::isTickStale(20261027, 103800000, lDate, lTime));
+	EXPECT_TRUE(TimeUtils::isTickStale(20261026, 103800000, lDate, lTime));
 }
 
 /*
@@ -111,14 +121,19 @@ TEST(test_nightstale, test_stale_night_session)
 	// 夜盘盘内: 23:59相对20:55是更新时刻, 放行
 	EXPECT_FALSE(TimeUtils::isTickStale(20261026, 235959999, lDate, lTime));
 
-	// 盘内跨零点: 00:00在23:59之后, 放行; 23:59的迟到tick在00:00后必须拒绝
+	// 盘内跨零点: 日历日期翻转为20261027后, 00:00在23:59之后, 放行;
+	// 同日历日(20261026)的00:00是24小时前的残留, 必须拒绝;
+	// 23:59的迟到tick在00:00后必须拒绝
 	uint32_t lTime2 = 235959999;
-	EXPECT_FALSE(TimeUtils::isTickStale(20261026, 0, 20261026, lTime2));
-	EXPECT_TRUE(TimeUtils::isTickStale(20261026, 235900000, 20261026, lTime2));
+	EXPECT_FALSE(TimeUtils::isTickStale(20261027, 0, 20261026, lTime2));
+	EXPECT_TRUE(TimeUtils::isTickStale(20261026, 0, 20261026, lTime2));
+	EXPECT_TRUE(TimeUtils::isTickStale(20261026, 235900000, 20261027, lTime2));
 
-	// 已推进到凌晨01:00(10000000)后, 收到23:xx的迟到tick必须拒绝
+	// 已推进到凌晨01:00后, 收到23:xx的迟到tick必须拒绝
+	// 注意: 01:00时本地日历日期已是次日(20261027), 残留tick(20261026,23:00)
+	// 投影后交易日同为20261027, 时序键(23:00)=300 < (01:00)=500 -> 陈旧
 	uint32_t lTime3 = 10000000;
-	EXPECT_TRUE(TimeUtils::isTickStale(20261026, 230000000, 20261026, lTime3));
+	EXPECT_TRUE(TimeUtils::isTickStale(20261026, 230000000, 20261027, lTime3));
 }
 
 /*
@@ -206,4 +221,42 @@ TEST(test_nightstale, test_signal_gate_session)
 	 * bStrict的段尾最后一分钟排除语义失效。对信号门影响极小(仅多放行段尾分钟),
 	 * 故此处不对段尾分钟(如1500的bStrict行为)做断言
 	 */
+}
+
+/*
+ * 2026.11.03 夜盘事故回归: 日盘收盘~夜盘开盘间隙时刻(15:01~19:59)毒化基线
+ * 场景: 夜盘22:14运行中重启, init基线=墙钟(20261103, 2214),
+ * CTP登录重放携带间隙时刻残留快照(19:03)
+ * 修复前: chronoKey(1903)=2303 > chronoKey(2214)=214, 同日比较放行 -> 基线钉死19:03,
+ *         此后全部夜盘实时tick(key=215左右)被判陈旧, 引擎时钟冻结(inTrading=0)
+ * 修复后: isTickStale先做交易日投影(夜盘>=20:00归属下一交易日),
+ *         毒tick tDay=20261103 < 本地tDay=20261104, 日期域先分 -> 拒绝
+ */
+TEST(test_nightstale, test_gap_time_poison)
+{
+	// 夜盘22:14重启, init基线为墙钟
+	uint32_t lDate = 20261103;
+	uint32_t lTime = 221403000;
+
+	// 间隙时刻残留(15:01~19:59)全部必须拒绝 —— 本次事故的毒tick形态
+	EXPECT_TRUE(TimeUtils::isTickStale(20261103, 190321000, lDate, lTime));
+	EXPECT_TRUE(TimeUtils::isTickStale(20261103, 150100000, lDate, lTime));
+	EXPECT_TRUE(TimeUtils::isTickStale(20261103, 153000000, lDate, lTime));
+	EXPECT_TRUE(TimeUtils::isTickStale(20261103, 195959999, lDate, lTime));
+
+	// 夜盘实时tick必须放行(与基线同时刻或更新)
+	EXPECT_FALSE(TimeUtils::isTickStale(20261103, 221403000, lDate, lTime));
+	EXPECT_FALSE(TimeUtils::isTickStale(20261103, 221500000, lDate, lTime));
+	EXPECT_FALSE(TimeUtils::isTickStale(20261103, 225959999, lDate, lTime));
+
+	// 基线已推进到22:30后, 间隙残留依旧拒绝
+	uint32_t lTime2 = 223000000;
+	EXPECT_TRUE(TimeUtils::isTickStale(20261103, 190321000, lDate, lTime2));
+
+	// 跨零点投影一致性: 22:50基线(投影到20261104)之后, 次日00:30(同投影20261104)放行
+	EXPECT_FALSE(TimeUtils::isTickStale(20261104, 30000000, 20261103, 225000000));
+
+	// 对照: 日盘15:30运行中收到19:03(时钟上晚于本地的间隙时刻), 按上游未来tick语义放行,
+	// 由Parser层check_time(未来时间戳过滤)负责拦截
+	EXPECT_FALSE(TimeUtils::isTickStale(20261103, 190321000, 20261103, 153000000));
 }

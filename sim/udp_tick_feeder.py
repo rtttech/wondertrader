@@ -127,6 +127,9 @@ def main():
     ap.add_argument("--start-time", default="", help="强制时间基准 HH:MM:SS（缺省自动判定）")
     ap.add_argument("--date", default="", help="tick 日期 YYYYMMDD（缺省今天；盘外模拟传下一交易日以通过 ticker 墙钟基线守卫）")
     ap.add_argument("--hots", default="common/hots.json", help="hots.json 路径（解析 .HOT 用）")
+    ap.add_argument("--poison", type=int, default=0,
+                    help="启动前注入 N 条间隙时刻毒 tick(19:03:21.000)——回归测试:"
+                         "2026.11.03夜盘事故形态, 修复前会毒化ticker基线导致分钟收线停摆")
     args = ap.parse_args()
 
     # 时间基准：交易时段内用当前墙钟，否则用 14:00:00
@@ -161,6 +164,28 @@ def main():
 
     print("[feeder] sending to %s ports=%s codes=%s for %ds" %
           (args.host, ports, args.codes, args.seconds))
+
+    # 毒 tick 前奏：模拟 CTP 登录重放的间隙时刻(19:03:21.000)残留快照
+    # 修复后(isTickStale交易日投影)应全部被拒, 分钟收线不受影响;
+    # 修复前这些tick会反超夜盘基线把时钟钉死在19:03(判据B将失败)
+    if args.poison > 0:
+        poison_time = 190321000
+        for i in range(args.poison):
+            for exchg, code in codes:
+                t = WTSTickStruct()
+                t.exchg = exchg.encode()
+                t.code = code.encode()
+                t.price = args.start_price
+                t.trading_date = today
+                t.action_date = today
+                t.action_time = poison_time
+                pkt = struct.pack("<I", UDP_MSG_PUSHTICK) + bytes(t)
+                for port in ports:
+                    sock.sendto(pkt, (args.host, port))
+                n_sent += 1
+            time.sleep(0.01)
+        print("[feeder] poison injected: %d ticks @%d" % (args.poison * len(codes), poison_time))
+
     while True:
         elapsed = time.time() - t0
         if elapsed >= args.seconds:

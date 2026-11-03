@@ -82,16 +82,17 @@ SESSION_STATE=$(python3 - <<'PYEOF'
 import datetime
 now = datetime.datetime.now()
 secs = now.hour * 3600 + now.minute * 60 + now.second
-sess = [(9*3600, 10*3600+15*60), (10*3600+30*60, 11*3600+30*60), (13*3600+30*60, 15*3600)]
+sess = [(9*3600, 10*3600+15*60), (10*3600+30*60, 11*3600+30*60), (13*3600+30*60, 15*3600),
+        (21*3600, 23*3600+59*60+59), (0, 2*3600+30*60)]
 print("in" if any(a <= secs <= b for a, b in sess) else "out")
 PYEOF
 )
 if [ "$SESSION_STATE" = "in" ]; then
-    "$PYBIN" udp_tick_feeder.py --seconds "$FEED_DUR" --codes SHFE.ag.HOT --mport 9002
+    "$PYBIN" udp_tick_feeder.py --poison 50 --seconds "$FEED_DUR" --codes SHFE.ag.HOT --mport 9002
 else
     TDATE=$(date -d tomorrow +%Y%m%d)
     echo "[sim] off-session run: tick date=$TDATE base=09:30:00"
-    "$PYBIN" udp_tick_feeder.py --seconds "$FEED_DUR" --codes SHFE.ag.HOT --mport 9002 \
+    "$PYBIN" udp_tick_feeder.py --poison 50 --seconds "$FEED_DUR" --codes SHFE.ag.HOT --mport 9002 \
         --date "$TDATE" --start-time 09:30:00
 fi
 echo "== 3) 等待引擎退出 =="
