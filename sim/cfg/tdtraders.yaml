@@ -1,0 +1,13 @@
+# 模拟交易通道：TraderMocker 本地即时撮合，不依赖任何柜台
+# udp_port 必须与 run_sim.sh 中 feeder 的 --mport 一致（mocker 靠 UDP 行情撮合）
+traders:
+-   active: true
+    id: sim_mocker
+    module: TraderMocker
+    savedata: false
+    mockerid: 0
+    udp_port: 9002
+    span: 1
+    newpx: false
+    maxqty: 10
+    minqty: 1
